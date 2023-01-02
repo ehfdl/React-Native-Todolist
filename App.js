@@ -1,235 +1,196 @@
 import { StatusBar } from "expo-status-bar";
 import {
-  Button,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native";
-import { AntDesign } from "@expo/vector-icons";
-import { FontAwesome } from "@expo/vector-icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import uuid from "react-native-uuid";
+import Header from "./components/Header";
+import TaskInput from "./components/TaskInput";
+import TaskList from "./components/TaskList";
+import {
+  onSnapshot,
+  query,
+  collection,
+  doc,
+  orderBy,
+  addDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+} from "firebase/firestore";
+import { dbService } from "./firebase";
+import { async } from "@firebase/util";
 
 export default function App() {
   const [task, setTask] = useState("");
   const [category, setCategory] = useState("");
+  const [edittask, setEditTask] = useState("");
   const [tasklist, setTasklist] = useState([]);
 
-  const onSubmitTask = () => {
+  const pushCategory = async (cat) => {
+    setCategory(cat); // 눈에 바로 보이는 탭 변경
+    await updateDoc(doc(dbService, "category", "currentCategory"), {
+      category: cat,
+    });
+  };
+
+  const onSubmitTask = async () => {
     const newtask = {
-      id: uuid.v4(),
+      // id: uuid.v4(),
       task,
       isDone: false,
+      isEdit: false,
       category,
+      createAt: Date.now(),
     };
-    setTasklist([...tasklist, newtask]);
+    // setTasklist([...tasklist, newtask]);
+    await addDoc(collection(dbService, "Tasks"), newtask);
     setTask("");
   };
 
-  const changeIsDone = (id) => {
-    const tasks = tasklist.map((task) => {
-      if (task.id === id) {
-        return {
-          ...task,
-          isDone: !task.isDone,
+  const changeIsDone = async (id) => {
+    // const tasks = tasklist.map((task) => {
+    //   if (task.id === id) {
+    //     return {
+    //       ...task,
+    //       isDone: !task.isDone,
+    //     };
+    //   } else {
+    //     return {
+    //       ...task,
+    //     };
+    //   }
+    // });
+    // setTasklist(tasks);
+    const snapshot = await getDoc(doc(dbService, "Tasks", id)); // 하나의 doc를 가져옴.
+    await updateDoc(doc(dbService, "Tasks", id), {
+      isDone: !snapshot.data().isDone,
+    });
+  };
+
+  const deleteTask = async (id) => {
+    // const tasks = tasklist.filter((task) => task.id !== id);
+    // await deleteDoc(doc(dbService, "Tasks", id));
+    // setTasklist([...tasks]);
+    Alert.alert("Task 삭제", "정말 삭제하시겠습니까?", [
+      {
+        text: "취소",
+        style: "cancel",
+      },
+      {
+        text: "삭제",
+        style: "destructive",
+        onPress: async () => {
+          // const newTodos = todos.filter((todo) => todo.id !== id);
+          // setTodos(newTodos);
+          await deleteDoc(doc(dbService, "Tasks", id));
+        },
+      },
+    ]);
+  };
+
+  const editInputhandler = async (id) => {
+    // const tasks = tasklist.map((task) => {
+    //   if (task.id === id) {
+    //     return {
+    //       ...task,
+    //       isEdit: !task.isEdit,
+    //     };
+    //   } else {
+    //     return {
+    //       ...task,
+    //     };
+    //   }
+    // });
+
+    // setTasklist(tasks);
+    await updateDoc(doc(dbService, "Tasks", id), { isEdit: true });
+  };
+
+  const editSubmitTask = async (id) => {
+    // const tasks = tasklist.map((task) => {
+    //   if (task.id === id) {
+    //     return {
+    //       ...task,
+    //       task: edittask,
+    //       isEdit: !task.isEdit,
+    //     };
+    //   } else {
+    //     return {
+    //       ...task,
+    //     };
+    //   }
+    // });
+    // setTasklist(tasks);
+    // setEditTask("");
+    await updateDoc(doc(dbService, "Tasks", id), {
+      task: edittask,
+      isEdit: false,
+    });
+    setEditTask("");
+  };
+
+  useEffect(() => {
+    const q = query(
+      collection(dbService, "Tasks"),
+      orderBy("createAt", "desc") // 해당 collection 내의 docs들을 createdAt 속성을 내림차순 기준으로
+    );
+
+    onSnapshot(q, (snapshot) => {
+      // q (쿼리)안에 담긴 collection 내의 변화가 생길 때 마다 매번 실행됨
+      const newTasks = snapshot.docs.map((doc) => {
+        const newTask = {
+          id: doc.id,
+          ...doc.data(), // doc.data() : { text, createdAt, ...  }
         };
-      } else {
-        return {
-          ...task,
-        };
-      }
+        // console.log(newTask);
+        return newTask;
+      });
+
+      setTasklist(newTasks);
     });
 
-    setTasklist(tasks);
-  };
-
-  const deleteTask = (id) => {
-    const tasks = tasklist.filter((task) => task.id !== id);
-    setTasklist([...tasks]);
-  };
+    const getCategory = async () => {
+      // 렌더링이 되었을때 탭의 위치 저장.
+      const snapshot = await getDoc(
+        doc(dbService, "category", "currentCategory")
+      );
+      setCategory(snapshot.data().category);
+    };
+    getCategory();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
-      <View style={styles.headContainer}>
-        <TouchableOpacity onPress={() => setCategory("js")}>
-          <View
-            style={styles.headbox}
-            backgroundColor={category === "js" ? "lightblue" : "gray"}
-          >
-            <Text style={styles.headtext}>Javascript</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setCategory("Rt")}>
-          <View
-            style={styles.headbox}
-            backgroundColor={category === "Rt" ? "lightblue" : "gray"}
-          >
-            <Text style={styles.headtext}>React</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setCategory("ct")}>
-          <View
-            style={styles.headbox}
-            backgroundColor={category === "ct" ? "lightblue" : "gray"}
-          >
-            <Text style={styles.headtext}>Coding Test</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.inputcontainer}>
-        <TextInput
-          style={styles.tasktextinput}
-          placeholder="Enter your task"
-          value={task}
-          onSubmitEditing={onSubmitTask}
-          onChangeText={setTask}
-        />
-      </View>
-      <View style={styles.taskcontainer}>
-        {tasklist.map((task) => {
-          if (category === "js") {
-            return task.category === "js" ? (
-              <View style={styles.taskbox} key={task.id}>
-                {task.isDone ? (
-                  <Text style={styles.done}>{task.task}</Text>
-                ) : (
-                  <Text>{task.task}</Text>
-                )}
-                <View style={styles.taskiconbox}>
-                  <TouchableOpacity onPress={() => changeIsDone(task.id)}>
-                    <AntDesign name="checksquare" size={24} color="black" />
-                  </TouchableOpacity>
-                  {/*  */}
-                  <FontAwesome name="pencil-square-o" size={24} color="black" />
-                  {/*  */}
-                  <TouchableOpacity onPress={() => deleteTask(task.id)}>
-                    <AntDesign name="delete" size={24} color="black" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null;
-          } else if (category === "Rt") {
-            return task.category === "Rt" ? (
-              <View style={styles.taskbox} key={task.id}>
-                {task.isDone ? (
-                  <Text style={styles.done}>{task.task}</Text>
-                ) : (
-                  <Text>{task.task}</Text>
-                )}
-                <View style={styles.taskiconbox}>
-                  <TouchableOpacity onPress={() => changeIsDone(task.id)}>
-                    <AntDesign name="checksquare" size={24} color="black" />
-                  </TouchableOpacity>
-                  <FontAwesome name="pencil-square-o" size={24} color="black" />
-                  <TouchableOpacity onPress={() => deleteTask(task.id)}>
-                    <AntDesign name="delete" size={24} color="black" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null;
-          } else if (category === "ct") {
-            return task.category === "ct" ? (
-              <View style={styles.taskbox} key={task.id}>
-                {task.isDone ? (
-                  <Text style={styles.done}>{task.task}</Text>
-                ) : (
-                  <Text>{task.task}</Text>
-                )}
-                <View style={styles.taskiconbox}>
-                  <TouchableOpacity onPress={() => changeIsDone(task.id)}>
-                    <AntDesign name="checksquare" size={24} color="black" />
-                  </TouchableOpacity>
-                  <FontAwesome name="pencil-square-o" size={24} color="black" />
-                  <TouchableOpacity onPress={() => deleteTask(task.id)}>
-                    <AntDesign name="delete" size={24} color="black" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null;
-          }
-        })}
-      </View>
+      <Header pushCategory={pushCategory} category={category} />
+      <TaskInput onSubmitTask={onSubmitTask} setTask={setTask} task={task} />
+      <TaskList
+        tasklist={tasklist}
+        category={category}
+        edittask={edittask}
+        editSubmitTask={editSubmitTask}
+        setEditTask={setEditTask}
+        changeIsDone={changeIsDone}
+        editInputhandler={editInputhandler}
+        deleteTask={deleteTask}
+      />
     </SafeAreaView>
   );
-}
-{
-  /* <TaskBox>
-                <Text>{task.task}</Text>
-                <TaskIconsBox>
-                  <AntDesign name="checksquare" size={24} color="black" />
-                  <FontAwesome name="pencil-square-o" size={24} color="black" />
-                  <AntDesign name="delete" size={24} color="black" />
-                </TaskIconsBox>
-              </TaskBox> */
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    alignContent: "center",
-  },
-  headContainer: {
-    width: "100%",
-    height: 80,
-    flexDirection: "row",
-    justifyContent: "space-around",
     alignItems: "center",
-    position: "relative",
-    marginTop: 10,
-  },
-  headbox: {
-    width: 95,
-    height: 50,
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
-  },
-  headtext: {
-    fontWeight: "bold",
-  },
-  inputcontainer: {
-    width: "100%",
-    height: 80,
-    justifyContent: "center",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    marginBottom: 20,
-  },
-  tasktextinput: {
-    width: "100%",
-    height: 40,
-    borderWidth: 1,
-    paddingLeft: 17,
-  },
-  taskcontainer: {
-    width: "100%",
-  },
-  taskbox: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "lightgray",
-    marginBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 10,
-  },
-  taskiconbox: {
-    width: 90,
-    height: "100%",
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-  },
-  done: {
-    textDecorationLine: "line-through",
   },
 });
